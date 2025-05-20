@@ -1,0 +1,42 @@
+.input-group {
+  padding: 1;
+  max-height: 5;
+
+  & Button {
+    width: 1fr;
+    padding: 0;
+  }
+
+  & Input {
+    width: 10fr;
+  }
+
+  & TextArea {
+    width: 10fr;
+  }
+}
+
+.message #bubble {
+  /* border: tall; */
+  min-height: 3;
+  max-width: 80%;
+  display: block;
+  margin: 1;
+}
+
+.message.assistant #bubble {
+  background: $panel-lighten-1;
+  padding: 1 1 0 1;
+}
+
+.message.user {
+  align: right middle;
+
+  & #bubble {
+    width: auto;
+    text-align: right;
+    align: right top;
+    background: $panel-darken-1;
+    padding: 1 1;
+  }
+}
