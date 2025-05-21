@@ -18,6 +18,11 @@ class ChatScreen(Screen):
 
     MODEL_OPTIONS = [
         ("GPT 4.1 Mini", "gpt-4.1-mini"),
+        ("GPT 4.1", "gpt-4.1"),
+        ("O3", "o3"),
+        ("O4 Mini", "o4-mini"),
+        ("O3 Mini", "o3-mini"),
+        ("GPT-4o", "gpt-4o"),
         ("GPT 4 Turbo", "gpt-4-turbo"),
         ("GPT 3.5 Turbo", "gpt-3.5-turbo"),
     ]
@@ -69,7 +74,7 @@ class ChatScreen(Screen):
 
         await messages.mount(user_message)
         for _ in range(10):
-            message = Message("..", role="assistant")
+            message = Message("", role="assistant")
             await messages.mount(message)
 
             model_selector = self.query_one("#model_selector", Select)
@@ -79,11 +84,8 @@ class ChatScreen(Screen):
 
             client = AsyncOpenAI()
             response = await client.chat.completions.create(
-                model=selected_model,  # Use the selected model here
-                messages=[
-                    {"role": "system", "content": "You are a helpful assistant."},
-                    *self.history,
-                ],
+                model=cast(str, selected_model),
+                messages=self.history,
                 stream=True,
                 tools=cast(list[ChatCompletionToolParam], tools.definitions()),
             )
