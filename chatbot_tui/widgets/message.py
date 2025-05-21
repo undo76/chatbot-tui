@@ -1,4 +1,4 @@
-from typing import Literal
+from typing import Literal, cast
 from textual.app import ComposeResult
 from textual.reactive import reactive
 from textual.containers import HorizontalGroup
@@ -11,7 +11,7 @@ class Message(HorizontalGroup):
     role = reactive("assistant", recompose=True)
     message = reactive("", layout=True)
 
-    def __init__(self, message: str, *, role: Literal["user", "assistant"]) -> None:
+    def __init__(self, message: str, *, role: Literal["user", "assistant", "tool_status"]) -> None:
         super().__init__()
         self.role = role
         self.message = message
@@ -21,6 +21,7 @@ class Message(HorizontalGroup):
         self.set_classes("message")
         self.set_class(self.role == "assistant", "assistant")
         self.set_class(self.role == "user", "user")
+        self.set_class(self.role == "tool_status", "tool_status")
 
     def compose(self) -> ComposeResult:
         if self.role == "user":
@@ -31,6 +32,12 @@ class Message(HorizontalGroup):
             )
         elif self.role == "assistant":
             yield Markdown(self.message, id="bubble")
+        elif self.role == "tool_status":
+            yield Static(
+                self.message,
+                id="bubble",
+                markup=False,
+            )
         else:
             raise ValueError(f"Invalid role: {self.role}")
 
@@ -40,3 +47,5 @@ class Message(HorizontalGroup):
             self.query_one("#bubble", Static).update(message)
         elif self.role == "assistant":
             self.query_one("#bubble", Markdown).update(message)
+        elif self.role == "tool_status":
+            self.query_one("#bubble", Static).update(message)

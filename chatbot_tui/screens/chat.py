@@ -7,7 +7,7 @@ from openai.types.chat.chat_completion_chunk import (
 )
 from textual.containers import HorizontalGroup, VerticalScroll
 from textual.screen import Screen
-from textual.widgets import Button, Footer, Header, Input
+from textual.widgets import Button, Footer, Header, Input, Select
 from textual.events import Key
 from ..tools import tools
 from chatbot_tui.widgets.message import Message
@@ -15,6 +15,13 @@ from chatbot_tui.widgets.message import Message
 
 class ChatScreen(Screen):
     """Main chat screen"""
+
+    MODEL_OPTIONS = [
+        ("GPT 4.1 Mini", "gpt-4.1-mini"),
+        ("GPT 4 Turbo", "gpt-4-turbo"),
+        ("GPT 3.5 Turbo", "gpt-3.5-turbo"),
+    ]
+    DEFAULT_MODEL = "gpt-4.1-mini"
 
     history: list = [{"role": "system", "content": "You are a helpful assistant."}]
 
@@ -24,10 +31,12 @@ class ChatScreen(Screen):
 
     def compose(self):
         yield Header()
+        yield Select(
+            options=self.MODEL_OPTIONS, value=self.DEFAULT_MODEL, id="model_selector"
+        )
         yield VerticalScroll(id="messages")
         yield HorizontalGroup(
             Input(),
-            # TextArea(),
             Button("Send", variant="primary", id="send"),
             classes="input-group",
         )
@@ -63,9 +72,14 @@ class ChatScreen(Screen):
             message = Message("..", role="assistant")
             await messages.mount(message)
 
+            model_selector = self.query_one("#model_selector", Select)
+            selected_model = model_selector.value
+            if selected_model is None:  # Handle case where value might be None
+                selected_model = self.DEFAULT_MODEL
+
             client = AsyncOpenAI()
             response = await client.chat.completions.create(
-                model="gpt-4.1-mini",
+                model=selected_model,  # Use the selected model here
                 messages=[
                     {"role": "system", "content": "You are a helpful assistant."},
                     *self.history,
@@ -109,14 +123,26 @@ class ChatScreen(Screen):
                 )
                 message.message += tools_as_str
                 messages.scroll_end()
-                self.history.extend(
-                    r.message
-                    for r in await asyncio.gather(
-                        *(
-                            tools.smart_tool_call(tool_call.model_dump())  # pyright: ignore
-                            for tool_call in final_tool_calls.values()
-                        )
+
+                tool_status_messages_to_remove = []
+                for tool_call in final_tool_calls.values():
+                    tool_name = tool_call.function.name
+                    status_message_widget = Message(
+                        f"Executing tool: {tool_name}...", role="tool_status"
+                    )
+                    await messages.mount(status_message_widget)
+                    tool_status_messages_to_remove.append(status_message_widget)
+                messages.scroll_end()
+
+                tool_results = await asyncio.gather(
+                    *(
+                        tools.smart_tool_call(tool_call.model_dump())  # pyright: ignore
+                        for tool_call in final_tool_calls.values()
                     )
                 )
+                self.history.extend(r.message for r in tool_results)
+
+                for status_msg in tool_status_messages_to_remove:
+                    await status_msg.remove()
             else:
                 return
