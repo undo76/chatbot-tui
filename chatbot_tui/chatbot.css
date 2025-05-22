@@ -40,3 +40,17 @@
     padding: 1 1;
   }
 }
+
+.message.tool_thinking #bubble {
+  background: $success-darken-2;
+  color: $text;
+  padding: 1 1;
+  border-left: thick $success;
+}
+
+.message.tool_status #bubble {
+  background: $warning-darken-2;
+  color: $text;
+  padding: 1 1;
+  border-left: thick $warning;
+}
