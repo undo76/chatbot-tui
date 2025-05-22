@@ -1,5 +1,6 @@
 import asyncio
-from typing import cast
+import json
+from typing import cast, Dict
 from openai import AsyncOpenAI
 from openai.types.chat import ChatCompletionToolParam
 from openai.types.chat.chat_completion_chunk import (
@@ -29,6 +30,7 @@ class ChatScreen(Screen):
     DEFAULT_MODEL = "gpt-4.1-mini"
 
     history: list = [{"role": "system", "content": "You are a helpful assistant."}]
+    tool_call_widgets: Dict[int, Message] = {}
 
     async def on_mount(self):
         """Mount the chat screen and add a message widget."""
@@ -92,6 +94,10 @@ class ChatScreen(Screen):
 
             full_reply = ""
             final_tool_calls: dict[int, ChoiceDeltaToolCall] = {}
+            
+            # Clear any existing tool call widgets
+            self.tool_call_widgets = {}
+            
             async for chunk in response:
                 if chunk.choices[0].delta.content:
                     content = chunk.choices[0].delta.content
@@ -104,11 +110,37 @@ class ChatScreen(Screen):
 
                     if index not in final_tool_calls:
                         final_tool_calls[index] = tool_call
+                        # Create a new widget for this tool call
+                        tool_call_widget = Message(
+                            f"Building tool call...", 
+                            role="tool_thinking"
+                        )
+                        await messages.mount(tool_call_widget)
+                        self.tool_call_widgets[index] = tool_call_widget
+                        messages.scroll_end()
 
                     assert tool_call.function
                     final_tool_calls[index].function.arguments += (  # pyright: ignore
                         tool_call.function.arguments or ""
                     )
+                    
+                    # Update the tool call widget with the current state
+                    if index in self.tool_call_widgets:
+                        tool_name = final_tool_calls[index].function.name or "unknown"
+                        args_so_far = final_tool_calls[index].function.arguments or ""
+                        
+                        # Try to format the JSON if it's valid
+                        try:
+                            args_json = json.loads(args_so_far)
+                            formatted_args = json.dumps(args_json, indent=2)
+                        except json.JSONDecodeError:
+                            formatted_args = args_so_far
+                            
+                        self.tool_call_widgets[index].message = (
+                            f"Building tool call: {tool_name}\n"
+                            f"```json\n{{\n  \"name\": \"{tool_name}\",\n  \"arguments\": {formatted_args}\n}}\n```"
+                        )
+                        messages.scroll_end()
 
             self.history.append(
                 {
@@ -126,6 +158,11 @@ class ChatScreen(Screen):
                 message.message += tools_as_str
                 messages.scroll_end()
 
+                # Remove the tool call widgets now that we're done building them
+                for widget in self.tool_call_widgets.values():
+                    await widget.remove()
+                self.tool_call_widgets = {}
+
                 tool_status_messages_to_remove = []
                 for tool_call in final_tool_calls.values():
                     tool_name = tool_call.function.name
@@ -135,7 +172,7 @@ class ChatScreen(Screen):
                     await messages.mount(status_message_widget)
                     tool_status_messages_to_remove.append(status_message_widget)
                 messages.scroll_end()
-
+                
                 tool_results = await asyncio.gather(
                     *(
                         tools.smart_tool_call(tool_call.model_dump())  # pyright: ignore
@@ -143,7 +180,8 @@ class ChatScreen(Screen):
                     )
                 )
                 self.history.extend(r.message for r in tool_results)
-
+                
+                # Remove the status messages
                 for status_msg in tool_status_messages_to_remove:
                     await status_msg.remove()
             else:
